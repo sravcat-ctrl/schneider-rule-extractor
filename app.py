@@ -67,10 +67,10 @@ chunks = splitter.split_text(text)
 st.write(f"Created {len(chunks)} chunks for processing")
 
 # ----------------------------
-# 5. Vector store
+# 5. Vector store (Chroma)
 # ----------------------------
 embeddings = OpenAIEmbeddings()
-vectorstore = FAISS.from_texts(chunks, embeddings)
+vectorstore = Chroma.from_texts(chunks, embedding=embeddings)
 retriever = vectorstore.as_retriever(search_kwargs={"k": 6})
 
 # ----------------------------
