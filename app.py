@@ -2,7 +2,7 @@
 # RULE EXTRACTOR (LLM + API) - CHECKLIST STYLE
 # =========================================
 
-!pip install -q openai langchain langchain-openai langchain-text-splitters faiss-cpu python-docx pypdf
+pip install -q openai langchain langchain-openai langchain-text-splitters faiss-cpu python-docx pypdf
 
 import os
 from google.colab import files
