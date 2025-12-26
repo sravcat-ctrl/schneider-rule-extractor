@@ -3,8 +3,9 @@ openai==1.32.0
 langchain==0.1.148
 langchain-openai==0.0.30
 langchain-text-splitters==0.0.8
-faiss-cpu==1.7.4
+chromadb==0.3.26
 python-docx==0.8.11
 pypdf==3.16.0
+
 
 
