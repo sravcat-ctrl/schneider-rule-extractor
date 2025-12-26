@@ -6,4 +6,4 @@ langchain-text-splitters
 faiss-cpu
 python-docx
 pypdf
-google colab
+googlecolab
