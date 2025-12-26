@@ -1,14 +1,12 @@
 # =========================================
-# RULE EXTRACTOR (LLM + API) - CHECKLIST STYLE
+# RULE EXTRACTOR (LLM + API) - STREAMLIT CHECKLIST
 # =========================================
 
-
-
 import os
-from google.colab import files
+import json
+import streamlit as st
 from docx import Document
 from pypdf import PdfReader
-import json
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
@@ -17,51 +15,66 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
 # ----------------------------
-# 1. SET OPENAI API KEY
+# 0. Streamlit page config
 # ----------------------------
-os.environ["OPENAI_API_KEY"] = "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"
+st.set_page_config(page_title="Rule Extractor", layout="wide")
+st.title("📄 Rule Extractor - Checklist Style")
 
 # ----------------------------
-# 2. UPLOAD DOCUMENT
+# 1. Input OpenAI API Key
 # ----------------------------
-print("Upload your rule guideline file (.txt, .pdf, .docx)")
-uploaded = files.upload()
-file_path = list(uploaded.keys())[0]
+api_key = st.text_input("Enter your OpenAI API Key", type="password")
+if api_key:
+    os.environ["OPENAI_API_KEY"] = api_key
+else:
+    st.warning("Please enter your OpenAI API Key to continue.")
+    st.stop()
 
 # ----------------------------
-# 3. LOAD FILE
+# 2. File uploader
 # ----------------------------
-def load_file(path):
-    if path.endswith(".txt"):
-        return open(path, "r", encoding="utf-8").read()
-    elif path.endswith(".pdf"):
-        reader = PdfReader(path)
+uploaded_file = st.file_uploader(
+    "Upload your rule guideline file (.txt, .pdf, .docx)", 
+    type=["txt", "pdf", "docx"]
+)
+if not uploaded_file:
+    st.stop()
+
+# ----------------------------
+# 3. Load file content
+# ----------------------------
+def load_file(file):
+    name = file.name
+    if name.endswith(".txt"):
+        return file.read().decode("utf-8")
+    elif name.endswith(".pdf"):
+        reader = PdfReader(file)
         return "\n".join(p.extract_text() or "" for p in reader.pages)
-    elif path.endswith(".docx"):
-        doc = Document(path)
+    elif name.endswith(".docx"):
+        doc = Document(file)
         return "\n".join(p.text for p in doc.paragraphs)
     else:
         raise ValueError("Unsupported file format")
 
-text = load_file(file_path)
-print(f"Loaded {len(text)} characters")
+text = load_file(uploaded_file)
+st.success(f"Loaded {len(text)} characters")
 
 # ----------------------------
-# 4. SPLIT INTO CHUNKS
+# 4. Split text into chunks
 # ----------------------------
 splitter = RecursiveCharacterTextSplitter(chunk_size=1200, chunk_overlap=200)
 chunks = splitter.split_text(text)
-print(f"Created {len(chunks)} chunks")
+st.write(f"Created {len(chunks)} chunks for processing")
 
 # ----------------------------
-# 5. VECTOR STORE FOR RETRIEVAL
+# 5. Vector store
 # ----------------------------
 embeddings = OpenAIEmbeddings()
 vectorstore = FAISS.from_texts(chunks, embeddings)
 retriever = vectorstore.as_retriever(search_kwargs={"k": 6})
 
 # ----------------------------
-# 6. GPT PROMPT
+# 6. GPT Prompt
 # ----------------------------
 prompt = ChatPromptTemplate.from_template("""
 You are a rule extraction AI. Extract ALL rules from the given text. 
@@ -83,7 +96,7 @@ Context:
 llm = ChatOpenAI(model="gpt-4o", temperature=0)
 
 # ----------------------------
-# 7. RAG RETRIEVAL & EXTRACTION
+# 7. Extraction function
 # ----------------------------
 def extract_rules(query="Extract all rules"):
     docs = retriever.invoke(query)
@@ -91,32 +104,30 @@ def extract_rules(query="Extract all rules"):
     chain = prompt | llm | StrOutputParser()
     return chain.invoke({"context": context})
 
-print("Extracting rules with LLM...")
-rules_json_text = extract_rules()
+# ----------------------------
+# 8. Run extraction
+# ----------------------------
+if st.button("Extract Rules"):
+    with st.spinner("Extracting rules with LLM..."):
+        rules_json_text = extract_rules()
 
-# ----------------------------
-# 8. PARSE AND SAVE JSON
-# ----------------------------
-try:
-    rules_list = json.loads(rules_json_text)
-except:
-    print("Warning: Failed to parse JSON. Falling back to line-by-line.")
-    rules_list = [{"rule": line.strip()} for line in rules_json_text.split("\n") if line.strip()]
+        # Parse JSON safely
+        try:
+            rules_list = json.loads(rules_json_text)
+        except:
+            st.warning("Failed to parse JSON, falling back to line-by-line")
+            rules_list = [{"rule": line.strip()} for line in rules_json_text.split("\n") if line.strip()]
 
-with open("rules.json", "w", encoding="utf-8") as f:
-    json.dump(rules_list, f, indent=2)
+        # Save files in memory
+        rules_json_str = json.dumps(rules_list, indent=2)
+        checklist_str = "\n".join(f"[ ] {r['rule']}" for r in rules_list)
 
-# ----------------------------
-# 9. SAVE CHECKLIST FORMAT
-# ----------------------------
-with open("rules_checklist.txt", "w", encoding="utf-8") as f:
-    for r in rules_list:
-        f.write(f"[ ] {r['rule']}\n")
+        # Display sample rules
+        st.subheader("Sample Extracted Rules")
+        st.write(rules_list[:10])
 
-# ----------------------------
-# 10. DOWNLOAD FILES
-# ----------------------------
-files.download("rules.json")
-files.download("rules_checklist.txt")
+        # Download buttons
+        st.download_button("Download JSON", data=rules_json_str, file_name="rules.json")
+        st.download_button("Download Checklist", data=checklist_str, file_name="rules_checklist.txt")
 
-print("✅ Extraction complete! Files downloaded: rules.json, rules_checklist.txt")
+        st.success("✅ Extraction complete!")
